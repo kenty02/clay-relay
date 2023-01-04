@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"golang.org/x/net/websocket"
@@ -73,6 +74,17 @@ func handleWebSocket(c echo.Context) error {
 }
 
 func main() {
+	// if arg is "--register", call registerNativeMessagingHost and exit
+	if len(os.Args) > 1 && os.Args[1] == "--register" {
+		err := registerNativeMessagingHost()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return
+		}
+		fmt.Println("Registered")
+		return
+	}
+
 	file, err := os.OpenFile("chrome-native-host-log.txt" /*os.O_APPEND|*/, os.O_CREATE|os.O_WRONLY, 0644)
 	//err = errors.New("debug mode")
 	if err != nil {
@@ -162,17 +174,6 @@ var nativeEndian binary.ByteOrder
 
 // bufferSize used to set size of IO buffer - adjust to accommodate message payloads
 var bufferSize = 8192
-
-// IncomingMessage represents a message sent to the native host.
-type IncomingMessage struct {
-	Query string `json:"query"`
-}
-
-// OutgoingMessage respresents a response to an incoming message query.
-type OutgoingMessage struct {
-	Query    string `json:"query"`
-	Response string `json:"response"`
-}
 
 // Init initializes logger and determines native byte order.
 func Init(traceHandle io.Writer, errorHandle io.Writer) {
