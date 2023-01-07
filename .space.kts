@@ -20,6 +20,13 @@ job("Build windows-amd64") {
                 TARGET_PATH=clay-relay/builds/${'$'}JB_SPACE_EXECUTION_NUMBER/
                 REPO_URL=https://files.pkg.jetbrains.space/npathy/p/clay/files
                 curl -i -H "Authorization: Bearer ${'$'}JB_SPACE_CLIENT_TOKEN" -F file=@"${'$'}SOURCE_PATH" ${'$'}REPO_URL/${'$'}TARGET_PATH
+                
+                echo Updating ref
+                echo ${'$'}TARGET_PATH > latest.txt
+                SOURCE_PATH=latest.txt
+                TARGET_PATH=clay-relay/
+                REPO_URL=https://files.pkg.jetbrains.space/npathy/p/clay/files
+                curl -i -H "Authorization: Bearer ${'$'}JB_SPACE_CLIENT_TOKEN" -F file=@"${'$'}SOURCE_PATH" ${'$'}REPO_URL/${'$'}TARGET_PATH
             """.trimIndent()
         }
     }
