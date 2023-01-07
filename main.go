@@ -22,8 +22,13 @@ var (
 	nativeHostMessage        = make(chan string)
 )
 
-func handleWebSocket(c echo.Context) error {
+const disableConnectionCheck = false
 
+func handleWebSocket(c echo.Context) error {
+	// 一旦wsを受け付けた後closeだとtrpcのwsLinkでreconnectの無限ループが発生することがあったためここで弾く
+	if webSocketClientConnected && !disableConnectionCheck {
+		return echo.NewHTTPError(400, "Client already connected")
+	}
 	websocket.Server{Handler: websocket.Handler(func(ws *websocket.Conn) {
 		Trace.Print("WebSocket client connected")
 		defer func(ws *websocket.Conn) {
@@ -32,10 +37,6 @@ func handleWebSocket(c echo.Context) error {
 				Error.Printf("Unable to close websocket connection: %v", err)
 			}
 		}(ws)
-		if webSocketClientConnected {
-			Error.Print("WebSocket client already connected.")
-			return
-		}
 
 		sendRelayMessage("open")
 
