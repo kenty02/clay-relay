@@ -8,9 +8,6 @@ job("Build windows-amd64") {
     container(image = "golang:1.19-alpine") {
         shellScript {
             content = """
-                set -e
-                set -x
-                
                 echo Install build deps
                 apk update
                 apk add --no-cache curl
