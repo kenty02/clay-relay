@@ -14,7 +14,7 @@ job("Build windows-amd64") {
                 echo Done, uploading
                 SOURCE_PATH=clay-relay.exe
                 TARGET_PATH=clay-relay/builds/${'$'}JB_SPACE_EXECUTION_NUMBER/
-                REPO_URL=https://files.pkg.jetbrains.space/npathy/p/clay/filesrepo
+                REPO_URL=https://files.pkg.jetbrains.space/npathy/p/clay/files
                 curl -i -H "Authorization: Bearer ${'$'}JB_SPACE_CLIENT_TOKEN" -F file=@"${'$'}SOURCE_PATH" ${'$'}REPO_URL/${'$'}TARGET_PATH
             """.trimIndent()
         }
