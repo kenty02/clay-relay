@@ -23,6 +23,7 @@ var (
 )
 
 const disableConnectionCheck = false
+const allowRemoteViewer = false
 
 func handleWebSocket(c echo.Context) error {
 	// 一旦wsを受け付けた後closeだとtrpcのwsLinkでreconnectの無限ループが発生することがあったためここで弾く
@@ -109,7 +110,13 @@ func main() {
 	serverErr := make(chan error)
 	defer close(serverErr)
 	go func() {
-		serverErr <- e.Start(":" + strconv.Itoa(port)) // todo doesn't throw error on port in use
+		var address string
+		if allowRemoteViewer {
+			address = ""
+		} else {
+			address = "127.0.0.1"
+		}
+		serverErr <- e.Start(address + ":" + strconv.Itoa(port)) // todo doesn't throw error on port in use
 	}()
 
 	Trace.Printf("Clay relay started with byte order: %v", nativeEndian)
