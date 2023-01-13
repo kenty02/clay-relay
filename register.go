@@ -47,7 +47,7 @@ func generateManifest() (string, error) {
 		Description:    "Clay relay",
 		Path:           ex,
 		Type:           "stdio",
-		AllowedOrigins: []string{"chrome-extension://mekgccaopmfdlnpcpohibfckbjfklmdi/"},
+		AllowedOrigins: []string{"chrome-extension://ofgodpngengnlbmpnjhondghmdeembik/"},
 	}
 	manifestJson, err := json.Marshal(manifest)
 	if err != nil {
