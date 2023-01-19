@@ -1,4 +1,4 @@
-module clay-relay-go
+module clay-relay
 
 go 1.19
 
