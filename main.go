@@ -87,7 +87,7 @@ func main() {
 		return
 	}
 
-	file, err := os.OpenFile("chrome-native-host-log.txt" /*os.O_APPEND|*/, os.O_CREATE|os.O_WRONLY, 0644)
+	file, err := os.OpenFile("clay-relay-log.txt" /*os.O_APPEND|*/, os.O_CREATE|os.O_WRONLY, 0644)
 	//err = errors.New("debug mode")
 	if err != nil {
 		Init(os.Stderr, os.Stderr)
@@ -98,6 +98,22 @@ func main() {
 		defer file.Close()
 	}
 
+	Trace.Printf("Clay relay started with byte order: %v", nativeEndian)
+	disconnected := make(chan struct{})
+	defer close(disconnected)
+	go func() {
+		read()
+		disconnected <- struct{}{}
+	}()
+	initialMessageRaw := <-nativeHostMessage
+	initialMessage := InitialMessage{}
+	err = json.Unmarshal([]byte(initialMessageRaw), &initialMessage)
+	if err != nil {
+		Error.Printf("Unable to parse initial message: %v", err)
+		return
+	}
+
+	sendRelayMessage("This is clay-relay") // todo move to below?
 	e := echo.New()
 	e.Use(middleware.Logger())
 	e.Static("/", "public")
@@ -105,7 +121,7 @@ func main() {
 	e.Logger.SetOutput(Trace.Writer())
 	e.HideBanner = true
 	e.HidePort = true
-	const port = 3003
+	port := initialMessage.Port
 	Trace.Print("Listening on port " + strconv.Itoa(port))
 	serverErr := make(chan error)
 	defer close(serverErr)
@@ -119,15 +135,6 @@ func main() {
 		serverErr <- e.Start(address + ":" + strconv.Itoa(port)) // todo doesn't throw error on port in use
 	}()
 
-	Trace.Printf("Clay relay started with byte order: %v", nativeEndian)
-	disconnected := make(chan struct{})
-	defer close(disconnected)
-	go func() {
-		read()
-		disconnected <- struct{}{}
-	}()
-
-	sendRelayMessage("This is clay-relay")
 	go func() {
 		for {
 			select {
@@ -147,6 +154,8 @@ func main() {
 	case <-disconnected:
 		Trace.Print("Disconnected.")
 	}
+	Trace.Printf("Largest message size was: %v", largestMessageSize)
+	Trace.Printf("Clay relay stopped.")
 }
 
 type RelayMessage struct {
@@ -161,6 +170,11 @@ func sendRelayMessage(msg string) {
 		return
 	}
 	sendBytes(relayMessageJson)
+}
+
+// InitialMessage from native host to relay
+type InitialMessage struct {
+	Port int `json:"port"`
 }
 
 /*
@@ -198,6 +212,8 @@ func Init(traceHandle io.Writer, errorHandle io.Writer) {
 	}
 }
 
+var largestMessageSize int = 0
+
 // read Creates a new buffered I/O reader and reads messages from Stdin.
 func read() {
 	v := bufio.NewReader(os.Stdin)
@@ -213,7 +229,10 @@ func read() {
 	for b, err := s.Read(lengthBytes); b > 0 && err == nil; b, err = s.Read(lengthBytes) {
 		// convert message length bytes to integer value
 		lengthNum = readMessageLength(lengthBytes)
-		Trace.Printf("Message size in bytes: %v", lengthNum)
+		//Trace.Printf("Message size in bytes: %v", lengthNum)
+		if lengthNum > largestMessageSize {
+			largestMessageSize = lengthNum
+		}
 
 		// If message length exceeds size of buffer, the message will be truncated.
 		// This will likely cause an error when we attempt to unmarshal message to JSON.
@@ -249,7 +268,7 @@ func readMessageLength(msg []byte) int {
 // parseMessage parses incoming message
 func parseMessage(msg []byte) {
 	iMsg := string(msg)
-	Trace.Printf("Message received: %s", msg)
+	//Trace.Printf("Message received: %s", msg)
 	nativeHostMessage <- iMsg
 }
 
