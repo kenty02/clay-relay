@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/clay-relay-go.iml" filepath="$PROJECT_DIR$/.idea/clay-relay-go.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/clay-relay.iml" filepath="$PROJECT_DIR$/.idea/clay-relay.iml" />
     </modules>
   </component>
 </project>
