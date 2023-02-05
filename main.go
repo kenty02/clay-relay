@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -165,10 +166,17 @@ func main() {
 
 	sendRelayMessage("This is clay-relay at port " + strconv.Itoa(port))
 
+	nmhError := make(chan error)
 	go func() {
 		for {
 			select {
 			case msg := <-webSocketClientMessage:
+				// only 1MB messages are allowed to chrome
+				if len(msg) > 1024*1024 {
+					nmhError <- errors.New("message too large")
+					// abort handling
+					return
+				}
 				send(msg) // todo error handling
 			}
 		}
@@ -183,7 +191,10 @@ func main() {
 		}
 	case <-disconnected:
 		Trace.Print("Disconnected.")
+	case err := <-nmhError:
+		Error.Printf("Native messaging host error: %v", err)
 	}
+
 	Trace.Printf("Largest message size was: %v", largestMessageSize)
 	Trace.Printf("Clay relay stopped.")
 }
