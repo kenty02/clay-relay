@@ -10,6 +10,7 @@ import (
 	"golang.org/x/net/websocket"
 	"io"
 	"log"
+	"net"
 	"os"
 	"strconv"
 	"time"
@@ -123,7 +124,6 @@ func main() {
 		return
 	}
 
-	sendRelayMessage("This is clay-relay")
 	e := echo.New()
 	e.Use(middleware.Logger())
 	e.Static("/", "public")
@@ -131,8 +131,6 @@ func main() {
 	e.Logger.SetOutput(Trace.Writer())
 	e.HideBanner = true
 	e.HidePort = true
-	port := initialMessage.Port
-	Trace.Print("Listening on port " + strconv.Itoa(port))
 	serverErr := make(chan error)
 	defer close(serverErr)
 	go func() {
@@ -142,8 +140,20 @@ func main() {
 		} else {
 			address = "127.0.0.1"
 		}
-		serverErr <- e.Start(address + ":" + strconv.Itoa(port)) // todo doesn't throw error on port in use
+		serverErr <- e.Start(address + ":0")
 	}()
+
+	ms := 0
+	for e.Listener == nil {
+		time.Sleep(1 * time.Millisecond)
+		ms += 1
+	}
+	Trace.Printf("Main func waited %v ms for listener to start", ms)
+
+	port := e.ListenerAddr().(*net.TCPAddr).Port
+	Trace.Print("Listening on port " + strconv.Itoa(port))
+
+	sendRelayMessage("This is clay-relay at port " + strconv.Itoa(port))
 
 	go func() {
 		for {
@@ -184,7 +194,6 @@ func sendRelayMessage(msg string) {
 
 // InitialMessage from native host to relay
 type InitialMessage struct {
-	Port int `json:"port"`
 }
 
 /*

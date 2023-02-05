@@ -5,8 +5,8 @@ sequenceDiagram
     activate Extension
     Extension->>Relay: chrome.runtime.connectNative()
     activate Relay
-    Extension->>Relay: InitialMessage<br>{port: 1234}
-    Relay-->>Extension: RelayMessage<br>{relayMessage: "This is clay-relay"}
+    Extension->>Relay: InitialMessage<br>{}
+    Relay-->>Extension: RelayMessage<br>{relayMessage: "This is clay-relay at port 1234"}
     
     tRPC Client-)Relay: Connect WebSocket
     activate Relay
