@@ -13,6 +13,8 @@ builds:
       - linux
       - windows
       - darwin
+    # default value without omitting debug symbols
+    # ldflags: -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}} -X main.builtBy=goreleaser
 
 archives:
   - format: tar.gz
