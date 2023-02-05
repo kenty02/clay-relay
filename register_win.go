@@ -47,5 +47,16 @@ func unregisterNativeMessagingHost() error {
 		return err
 	}
 
+	manifestPath, err := getManifestPath()
+
+	// exists check
+	if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
+		return nil
+	}
+	err = os.Remove(manifestPath)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }

@@ -78,14 +78,24 @@ func handleWebSocket(c echo.Context) error {
 
 func main() {
 	// if arg is "--register", call registerNativeMessagingHost and exit
-	if len(os.Args) > 1 && os.Args[1] == "--register" {
-		err := registerNativeMessagingHost()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
+	if len(os.Args) > 1 {
+		if os.Args[1] == "--register" {
+			err := registerNativeMessagingHost()
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				return
+			}
+			fmt.Println("Registered")
+			return
+		} else if os.Args[1] == "--unregister" {
+			err := unregisterNativeMessagingHost()
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				return
+			}
+			fmt.Println("Unregistered")
 			return
 		}
-		fmt.Println("Registered")
-		return
 	}
 
 	file, err := os.OpenFile("clay-relay-log.txt" /*os.O_APPEND|*/, os.O_CREATE|os.O_WRONLY, 0644)
