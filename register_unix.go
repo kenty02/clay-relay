@@ -19,6 +19,11 @@ func getManifestPath() (string, error) {
 		manifestPath = filepath.Join(homeDir, "Library/Application Support/Google/Chrome/NativeMessagingHosts/"+nativeMessagingHostName+".json")
 	} else if runtime.GOOS == "linux" {
 		manifestPath = filepath.Join(homeDir, ".config/google-chrome/NativeMessagingHosts/"+nativeMessagingHostName+".json")
+		// Use system-wide installation when root (where user data dir is not deterministically known in playwright)
+		if os.Geteuid() == 0 {
+			manifestPath = "/etc/chromium/native-messaging-hosts/" + nativeMessagingHostName + ".json"
+			println("Using system-wide installation")
+		}
 	} else {
 		return "", fmt.Errorf("unsupported os on this build: %s", runtime.GOOS)
 	}

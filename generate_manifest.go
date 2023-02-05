@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 )
 
 const nativeMessagingHostName = "net.hu2ty.clay_relay"
@@ -33,6 +34,11 @@ func generateManifest(path string) error {
 	if err != nil {
 		return err
 	}
+	// make directory if not exists
+	err = os.MkdirAll(filepath.Dir(path), 0755)
+	if err != nil {
+		return err
+	}
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
 	if err != nil {
 		return err
@@ -46,5 +52,7 @@ func generateManifest(path string) error {
 	if err := f.Close(); err != nil {
 		panic(err)
 	}
+
+	println("Manifest generated: " + path)
 	return nil
 }

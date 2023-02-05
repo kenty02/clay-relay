@@ -12,6 +12,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"time"
 	"unsafe"
 )
 
@@ -104,11 +105,21 @@ func main() {
 		read()
 		disconnected <- struct{}{}
 	}()
-	initialMessageRaw := <-nativeHostMessage
-	initialMessage := InitialMessage{}
-	err = json.Unmarshal([]byte(initialMessageRaw), &initialMessage)
-	if err != nil {
-		Error.Printf("Unable to parse initial message: %v", err)
+
+	var initialMessage InitialMessage
+	select {
+	case initialMessageRaw := <-nativeHostMessage:
+		err = json.Unmarshal([]byte(initialMessageRaw), &initialMessage)
+		if err != nil {
+			Error.Printf("Unable to parse initial message: %v", err)
+			println("Did you mean to run this program with --register or --unregister?")
+			os.Exit(1)
+			return
+		}
+	case <-time.After(500 * time.Millisecond):
+		Error.Printf("No initial message received from native host")
+		println("Did you mean to run this program with --register or --unregister?")
+		os.Exit(1)
 		return
 	}
 
