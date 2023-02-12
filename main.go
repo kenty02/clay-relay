@@ -166,6 +166,21 @@ func main() {
 
 	sendRelayMessage("This is clay-relay at port " + strconv.Itoa(port))
 
+	// don't create relay info if we're running in CI
+	if os.Getenv("CI") == "" {
+		relayInfo, err := newRelayInfo(port)
+		if err != nil {
+			Error.Printf("Unable to create relay info: %v", err)
+			return
+		}
+		defer func() {
+			err := relayInfo.Close()
+			if err != nil {
+				Error.Printf("Unable to close relay info: %v", err)
+			}
+		}()
+	}
+
 	nmhError := make(chan error)
 	go func() {
 		for {
