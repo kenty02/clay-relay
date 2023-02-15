@@ -168,7 +168,7 @@ func main() {
 
 	// don't create relay info if we're running in CI
 	if os.Getenv("CI") == "" {
-		relayInfo, err := newRelayInfo(port)
+		relayInfo, err := newRelayInfo(port, initialMessage.Tags)
 		if err != nil {
 			Error.Printf("Unable to create relay info: %v", err)
 			return
@@ -230,6 +230,7 @@ func sendRelayMessage(msg string) {
 
 // InitialMessage from native host to relay
 type InitialMessage struct {
+	Tags []string `json:"tags"`
 }
 
 /*

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"runtime"
@@ -25,11 +26,17 @@ func getViewerUserDataPath() (string, error) {
 	return appDataPath + "/" + viewerAppName, nil
 }
 
-type RelayInfo struct {
+type RelayInfoSaveInfo struct {
 	Path string
 }
 
-func newRelayInfo(port int) (*RelayInfo, error) {
+type RelayInfo struct {
+	Port      int      `json:"port"`
+	ProcessID int      `json:"process_id"`
+	Tags      []string `json:"tags"`
+}
+
+func newRelayInfo(port int, tags []string) (*RelayInfoSaveInfo, error) {
 	userDataPath, err := getViewerUserDataPath()
 	if err != nil {
 		return nil, err
@@ -53,15 +60,26 @@ func newRelayInfo(port int) (*RelayInfo, error) {
 		}
 	}(relayInfoFile)
 
-	_, err = relayInfoFile.WriteString(fmt.Sprintf(`{"port": %d, "process_id": %d}`, port, os.Getpid()))
+	relayInfo := RelayInfo{
+		Port:      port,
+		ProcessID: os.Getpid(),
+		Tags:      tags,
+	}
+
+	// to json
+	relayInfoBytes, err := json.Marshal(relayInfo)
 	if err != nil {
 		return nil, err
 	}
-	return &RelayInfo{
+	_, err = relayInfoFile.Write(relayInfoBytes)
+	if err != nil {
+		return nil, err
+	}
+	return &RelayInfoSaveInfo{
 		Path: relayInfoFilePath,
 	}, nil
 }
 
-func (r *RelayInfo) Close() error {
+func (r *RelayInfoSaveInfo) Close() error {
 	return os.Remove(r.Path)
 }
