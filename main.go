@@ -21,7 +21,9 @@ import (
 var (
 	webSocketClientMessage   = make(chan string)
 	webSocketClientConnected = false
-	nativeHostMessage        = make(chan string)
+	initialMessageChan       = make(chan string)
+	extensionTrpcMessageChan = make(chan string)
+	initialMessageReceived   = false
 )
 
 const disableConnectionCheck = false
@@ -61,7 +63,7 @@ func handleWebSocket(c echo.Context) error {
 	ClientLoop:
 		for {
 			select {
-			case msg := <-nativeHostMessage:
+			case msg := <-extensionTrpcMessageChan:
 				err := websocket.Message.Send(ws, msg)
 				if err != nil {
 					c.Logger().Error(err)
@@ -118,13 +120,28 @@ func main() {
 		disconnected <- struct{}{}
 	}()
 
-	var initialMessage InitialMessage
+	var firstExtensionMessage Message
+	var initialMessagePayload InitialMessagePayload
 	select {
-	case initialMessageRaw := <-nativeHostMessage:
-		err = json.Unmarshal([]byte(initialMessageRaw), &initialMessage)
+	case initialMessageRaw := <-initialMessageChan:
+		close(initialMessageChan)
+		initialMessageReceived = true
+		err = json.Unmarshal([]byte(initialMessageRaw), &firstExtensionMessage)
 		if err != nil {
-			Error.Printf("Unable to parse initial message: %v", err)
+			Error.Printf("Unable to parse first message: %v", err)
 			println("Did you mean to run this program with --register or --unregister?")
+			os.Exit(1)
+			return
+		}
+		if firstExtensionMessage.Action != "init" {
+			Error.Printf("First message was not initial message, got %v", firstExtensionMessage)
+			println("Did you mean to run this program with --register or --unregister?")
+			os.Exit(1)
+			return
+		}
+		err = json.Unmarshal(firstExtensionMessage.Payload, &initialMessagePayload)
+		if err != nil {
+			Error.Printf("Unable to parse initial message payload: %v", err)
 			os.Exit(1)
 			return
 		}
@@ -168,7 +185,7 @@ func main() {
 
 	// don't create relay info if we're running in CI
 	if os.Getenv("CI") == "" {
-		relayInfo, err := newRelayInfo(port, initialMessage.Tags)
+		relayInfo, err := newRelayInfo(port, initialMessagePayload.Tags)
 		if err != nil {
 			Error.Printf("Unable to create relay info: %v", err)
 			return
@@ -192,7 +209,7 @@ func main() {
 					// abort handling
 					return
 				}
-				send(msg) // todo error handling
+				sendTrpc(msg) // todo error handling
 			}
 		}
 	}()
@@ -214,22 +231,29 @@ func main() {
 	Trace.Printf("Clay relay stopped.")
 }
 
-type RelayMessage struct {
-	RelayMessage string `json:"relayMessage"`
+type Message struct {
+	Action  string          `json:"action"`
+	Payload json.RawMessage `json:"payload"`
 }
 
 func sendRelayMessage(msg string) {
-	relayMessage := RelayMessage{msg}
-	relayMessageJson, err := json.Marshal(relayMessage)
+	payload := msg
+	payloadJson, err := json.Marshal(payload)
 	if err != nil {
-		Error.Printf("Unable to marshal relay message: %v", err)
+		Error.Printf("Unable to marshal payload: %v", err)
 		return
 	}
-	sendBytes(relayMessageJson)
+	nativeHostMessage := Message{"relayMessage", payloadJson}
+	nativeHostMessageJson, err := json.Marshal(nativeHostMessage)
+	if err != nil {
+		Error.Printf("Unable to marshal native host message: %v", err)
+		return
+	}
+	sendBytes(nativeHostMessageJson)
 }
 
-// InitialMessage from native host to relay
-type InitialMessage struct {
+// InitialMessagePayload from native host to relay
+type InitialMessagePayload struct {
 	Tags []string `json:"tags"`
 }
 
@@ -315,14 +339,50 @@ func readMessageLength(msg []byte) int {
 
 // parseMessage parses incoming message
 func parseMessage(msg []byte) {
-	iMsg := string(msg)
 	//Trace.Printf("Message received: %s", msg)
-	nativeHostMessage <- iMsg
+	// if not closed
+	if !initialMessageReceived {
+		iMsg := string(msg)
+		initialMessageChan <- iMsg
+		return
+	}
+	message := Message{}
+	err := json.Unmarshal(msg, &message)
+	if err != nil {
+		Error.Printf("Unable to parse message: %v", err)
+		return
+	}
+	switch message.Action {
+	case "trpc":
+		payloadString := ""
+		err := json.Unmarshal(message.Payload, &payloadString)
+		if err != nil {
+			Error.Printf("Unable to parse payload: %v", err)
+			return
+		}
+		extensionTrpcMessageChan <- payloadString
+	case "init":
+		Error.Printf("Received init message more than once: %v", msg)
+	default:
+		Error.Printf("Unknown message action %v")
+
+	}
+
 }
 
-func send(msg string) {
-	byteMsg := []byte(msg)
-	sendBytes(byteMsg)
+func sendTrpc(msg string) {
+	payload, err := json.Marshal(msg)
+	if err != nil {
+		Error.Printf("Unable to marshal payload: %v", err)
+		return
+	}
+	nativeHostMessage := Message{"trpc", payload}
+	nativeHostMessageJson, err := json.Marshal(nativeHostMessage)
+	if err != nil {
+		Error.Printf("Unable to marshal native host message: %v", err)
+		return
+	}
+	sendBytes(nativeHostMessageJson)
 }
 
 func sendBytes(msg []byte) {
