@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,7 +31,12 @@ var (
 const disableConnectionCheck = false
 const allowRemoteViewer = false
 
+var token string
+
 func handleWebSocket(c echo.Context) error {
+	if c.QueryParams().Get("token") != token {
+		return echo.NewHTTPError(403, "Invalid token")
+	}
 	// 一旦wsを受け付けた後closeだとtrpcのwsLinkでreconnectの無限ループが発生することがあったためここで弾く
 	if webSocketClientConnected && !disableConnectionCheck {
 		return echo.NewHTTPError(400, "Client already connected")
@@ -152,6 +159,14 @@ func main() {
 		return
 	}
 
+	// generate token
+	b := make([]byte, 16)
+	_, err = rand.Read(b)
+	if err != nil {
+		Error.Printf("Unable to generate token: %v", err)
+	}
+	token = hex.EncodeToString(b)
+
 	e := echo.New()
 	e.Use(middleware.Logger())
 	e.Static("/", "public")
@@ -181,7 +196,7 @@ func main() {
 	port := e.ListenerAddr().(*net.TCPAddr).Port
 	Trace.Print("Listening on port " + strconv.Itoa(port))
 
-	sendRelayMessage("This is clay-relay at port " + strconv.Itoa(port))
+	sendRelayMessage("This is clay-relay at port " + strconv.Itoa(port) + ", token " + token + ".")
 
 	// don't create relay info if we're running in CI
 	if os.Getenv("CI") == "" {

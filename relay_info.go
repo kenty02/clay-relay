@@ -34,6 +34,7 @@ type RelayInfo struct {
 	Port      int      `json:"port"`
 	ProcessID int      `json:"process_id"`
 	Tags      []string `json:"tags"`
+	Token     string   `json:"token"`
 }
 
 func newRelayInfo(port int, tags []string) (*RelayInfoSaveInfo, error) {
@@ -64,6 +65,7 @@ func newRelayInfo(port int, tags []string) (*RelayInfoSaveInfo, error) {
 		Port:      port,
 		ProcessID: os.Getpid(),
 		Tags:      tags,
+		Token:     token,
 	}
 
 	// to json
