@@ -10,9 +10,10 @@ import (
 	"fmt"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/skerkour/rz"
+	"github.com/skerkour/rz/log"
 	"golang.org/x/net/websocket"
 	"io"
-	"log"
 	"net"
 	"os"
 	"strconv"
@@ -42,11 +43,11 @@ func handleWebSocket(c echo.Context) error {
 		return echo.NewHTTPError(400, "Client already connected")
 	}
 	websocket.Server{Handler: websocket.Handler(func(ws *websocket.Conn) {
-		Trace.Print("WebSocket client connected")
+		log.Info("WebSocket client connected")
 		defer func(ws *websocket.Conn) {
 			err := ws.Close()
 			if err != nil {
-				Error.Printf("Unable to close websocket connection: %v", err)
+				log.Error("Unable to close websocket connection", rz.Error("error", err))
 			}
 		}(ws)
 
@@ -92,7 +93,7 @@ func main() {
 		if os.Args[1] == "--register" {
 			err := registerNativeMessagingHost()
 			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
+				_, _ = fmt.Fprintln(os.Stderr, err)
 				return
 			}
 			fmt.Println("Registered")
@@ -100,26 +101,29 @@ func main() {
 		} else if os.Args[1] == "--unregister" {
 			err := unregisterNativeMessagingHost()
 			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
+				_, _ = fmt.Fprintln(os.Stderr, err)
 				return
 			}
 			fmt.Println("Unregistered")
 			return
 		}
 	}
+	Init()
 
 	file, err := os.OpenFile("clay-relay-log.txt" /*os.O_APPEND|*/, os.O_CREATE|os.O_WRONLY, 0644)
 	//err = errors.New("debug mode")
 	if err != nil {
-		Init(os.Stderr, os.Stderr)
-		Error.Printf("Unable to create and/or open log file. Will log to Stderr. Error: %v", err)
+		log.SetLogger(rz.New(rz.Writer(os.Stderr)))
+		log.Error("Unable to open log file, using stderr instead", rz.Error("error", err))
 	} else {
-		Init(file, file)
-		// ensure we close the log file when we're done
-		defer file.Close()
+		writer := rz.SyncWriter(file)
+		log.SetLogger(rz.New(rz.Writer(writer)))
+		defer func(file *os.File) {
+			_ = file.Close()
+		}(file)
 	}
 
-	Trace.Printf("Clay relay started with byte order: %v", nativeEndian)
+	log.Info("Clay relay started", rz.Any("byte_order", nativeEndian))
 	disconnected := make(chan struct{})
 	defer close(disconnected)
 	go func() {
@@ -135,25 +139,25 @@ func main() {
 		initialMessageReceived = true
 		err = json.Unmarshal([]byte(initialMessageRaw), &firstExtensionMessage)
 		if err != nil {
-			Error.Printf("Unable to parse first message: %v", err)
+			log.Error("Unable to parse first message", rz.Error("error", err))
 			println("Did you mean to run this program with --register or --unregister?")
 			os.Exit(1)
 			return
 		}
 		if firstExtensionMessage.Action != "init" {
-			Error.Printf("First message was not initial message, got %v", firstExtensionMessage)
+			log.Error("First message was not initial message", rz.Any("message", firstExtensionMessage))
 			println("Did you mean to run this program with --register or --unregister?")
 			os.Exit(1)
 			return
 		}
 		err = json.Unmarshal(firstExtensionMessage.Payload, &initialMessagePayload)
 		if err != nil {
-			Error.Printf("Unable to parse initial message payload: %v", err)
+			log.Error("Unable to parse initial message payload", rz.Error("error", err))
 			os.Exit(1)
 			return
 		}
 	case <-time.After(500 * time.Millisecond):
-		Error.Printf("No initial message received from native host")
+		log.Error("No initial message received from native host")
 		println("Did you mean to run this program with --register or --unregister?")
 		os.Exit(1)
 		return
@@ -163,7 +167,7 @@ func main() {
 	b := make([]byte, 16)
 	_, err = rand.Read(b)
 	if err != nil {
-		Error.Printf("Unable to generate token: %v", err)
+		log.Error("Unable to generate token", rz.Error("error", err))
 	}
 	token = hex.EncodeToString(b)
 
@@ -171,7 +175,7 @@ func main() {
 	e.Use(middleware.Logger())
 	e.Static("/", "public")
 	e.GET("/ws", handleWebSocket)
-	e.Logger.SetOutput(Trace.Writer())
+	e.Logger.SetOutput(io.Discard)
 	e.HideBanner = true
 	e.HidePort = true
 	serverErr := make(chan error)
@@ -191,10 +195,10 @@ func main() {
 		time.Sleep(1 * time.Millisecond)
 		ms += 1
 	}
-	Trace.Printf("Main func waited %v ms for listener to start", ms)
+	log.Debug("Waited for listener", rz.Int("ms", ms), rz.String("address", e.Listener.Addr().String()))
 
 	port := e.ListenerAddr().(*net.TCPAddr).Port
-	Trace.Print("Listening on port " + strconv.Itoa(port))
+	log.Info("Listening started", rz.Int("port", port), rz.String("token", token))
 
 	sendRelayMessage("This is clay-relay at port " + strconv.Itoa(port) + ", token " + token + ".")
 
@@ -202,13 +206,13 @@ func main() {
 	if os.Getenv("CI") == "" {
 		relayInfo, err := newRelayInfo(port, initialMessagePayload.Tags)
 		if err != nil {
-			Error.Printf("Unable to create relay info: %v", err)
+			log.Error("Unable to create relay info", rz.Error("error", err))
 			return
 		}
 		defer func() {
 			err := relayInfo.Close()
 			if err != nil {
-				Error.Printf("Unable to close relay info: %v", err)
+				log.Error("Unable to close relay info", rz.Error("error", err))
 			}
 		}()
 	}
@@ -232,18 +236,17 @@ func main() {
 	select {
 	case err := <-serverErr:
 		if err != nil {
-			Error.Printf("WebSocket server error: %v", err)
+			log.Error("WebSocket server error", rz.Error("error", err))
 		} else {
-			Trace.Print("WebSocket server stopped without error.")
+			log.Info("WebSocket server stopped without error.")
 		}
 	case <-disconnected:
-		Trace.Print("Disconnected.")
+		log.Info("Disconnected.")
 	case err := <-nmhError:
-		Error.Printf("Native messaging host error: %v", err)
+		log.Error("Native messaging host error", rz.Error("error", err))
 	}
 
-	Trace.Printf("Largest message size was: %v", largestMessageSize)
-	Trace.Printf("Clay relay stopped.")
+	log.Info("Clay relay stopped.", rz.Int("largestMessageSize", largestMessageSize))
 }
 
 type Message struct {
@@ -255,13 +258,13 @@ func sendRelayMessage(msg string) {
 	payload := msg
 	payloadJson, err := json.Marshal(payload)
 	if err != nil {
-		Error.Printf("Unable to marshal payload: %v", err)
+		log.Error("Unable to marshal payload", rz.Error("error", err))
 		return
 	}
 	nativeHostMessage := Message{"relayMessage", payloadJson}
 	nativeHostMessageJson, err := json.Marshal(nativeHostMessage)
 	if err != nil {
-		Error.Printf("Unable to marshal native host message: %v", err)
+		log.Error("Unable to marshal native host message", rz.Error("error", err))
 		return
 	}
 	sendBytes(nativeHostMessageJson)
@@ -278,22 +281,11 @@ type InitialMessagePayload struct {
 * @Description: Basic chrome native messaging host example.
  */
 
-// constants for Logger
-var (
-	// Trace logs general information messages.
-	Trace *log.Logger
-	// Error logs error messages.
-	Error *log.Logger
-)
-
 // nativeEndian used to detect native byte order
 var nativeEndian binary.ByteOrder
 
-// Init initializes logger and determines native byte order.
-func Init(traceHandle io.Writer, errorHandle io.Writer) {
-	Trace = log.New(traceHandle, "TRACE: ", log.Ldate|log.Ltime|log.Lshortfile)
-	Error = log.New(errorHandle, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
-
+// Init determines native byte order.
+func Init() {
 	// determine native byte order so that we can read message size correctly
 	var one int16 = 1
 	b := (*byte)(unsafe.Pointer(&one))
@@ -316,7 +308,7 @@ func read() {
 	for b, err := io.ReadFull(os.Stdin, lengthBytes); b > 0 && err == nil; b, err = io.ReadFull(os.Stdin, lengthBytes) {
 		// convert message length bytes to integer value
 		lengthNum = readMessageLength(lengthBytes)
-		//Trace.Printf("Message size in bytes: %v", lengthNum)
+		//log.Info("Message size in bytes: %v", lengthNum)
 		if lengthNum > largestMessageSize {
 			largestMessageSize = lengthNum
 		}
@@ -324,21 +316,21 @@ func read() {
 		// read the content of the message from buffer
 		content := make([]byte, lengthNum)
 		/*		size, err := s.Read(content)
-				Trace.Printf("actual message size %v", size)
+				log.Info("actual message size %v", size)
 				if err != nil && err != io.EOF {
 					Error.Fatal(err)
 				}
 		*/
 		_, err := io.ReadFull(os.Stdin, content)
 		if err != nil {
-			log.Fatal(err)
+			log.Fatal("Failed to read native message content", rz.Error("error", err))
 		}
 
 		// message has been read, now parse and process
 		parseMessage(content)
 	}
 
-	Trace.Print("Stdin closed.")
+	log.Info("Stdin closed.")
 }
 
 // readMessageLength reads and returns the message length value in native byte order.
@@ -347,14 +339,14 @@ func readMessageLength(msg []byte) int {
 	buf := bytes.NewBuffer(msg)
 	err := binary.Read(buf, nativeEndian, &length)
 	if err != nil {
-		Error.Printf("Unable to read bytes representing message length: %v", err)
+		log.Error("Unable to read bytes representing message length", rz.Error("error", err))
 	}
 	return int(length)
 }
 
 // parseMessage parses incoming message
 func parseMessage(msg []byte) {
-	//Trace.Printf("Message received: %s", msg)
+	//log.Info("Message received: %s", msg)
 	// if not closed
 	if !initialMessageReceived {
 		iMsg := string(msg)
@@ -364,7 +356,7 @@ func parseMessage(msg []byte) {
 	message := Message{}
 	err := json.Unmarshal(msg, &message)
 	if err != nil {
-		Error.Printf("Unable to parse message: %v", err)
+		log.Error("Unable to parse message", rz.Error("error", err))
 		return
 	}
 	switch message.Action {
@@ -372,14 +364,14 @@ func parseMessage(msg []byte) {
 		payloadString := ""
 		err := json.Unmarshal(message.Payload, &payloadString)
 		if err != nil {
-			Error.Printf("Unable to parse payload: %v", err)
+			log.Error("Unable to parse payload", rz.Error("error", err))
 			return
 		}
 		extensionTrpcMessageChan <- payloadString
 	case "init":
-		Error.Printf("Received init message more than once: %v", msg)
+		log.Error("Received init message more than once", rz.String("message", string(msg)))
 	default:
-		Error.Printf("Unknown message action %v")
+		log.Error("Unknown message action %v")
 
 	}
 
@@ -388,13 +380,13 @@ func parseMessage(msg []byte) {
 func sendTrpc(msg string) {
 	payload, err := json.Marshal(msg)
 	if err != nil {
-		Error.Printf("Unable to marshal payload: %v", err)
+		log.Error("Unable to marshal payload", rz.Error("error", err))
 		return
 	}
 	nativeHostMessage := Message{"trpc", payload}
 	nativeHostMessageJson, err := json.Marshal(nativeHostMessage)
 	if err != nil {
-		Error.Printf("Unable to marshal native host message: %v", err)
+		log.Error("Unable to marshal native host message", rz.Error("error", err))
 		return
 	}
 	sendBytes(nativeHostMessageJson)
@@ -406,12 +398,12 @@ func sendBytes(msg []byte) {
 	var msgBuf bytes.Buffer
 	_, err := msgBuf.Write(msg)
 	if err != nil {
-		Error.Printf("Unable to write message length to message buffer: %v", err)
+		log.Error("Unable to write message length to message buffer", rz.Error("error", err))
 	}
 
 	_, err = msgBuf.WriteTo(os.Stdout)
 	if err != nil {
-		Error.Printf("Unable to write message buffer to Stdout: %v", err)
+		log.Error("Unable to write message buffer to Stdout", rz.Error("error", err))
 	}
 }
 
@@ -419,6 +411,6 @@ func sendBytes(msg []byte) {
 func writeMessageLength(msg []byte) {
 	err := binary.Write(os.Stdout, nativeEndian, uint32(len(msg)))
 	if err != nil {
-		Error.Printf("Unable to write message length to Stdout: %v", err)
+		log.Error("Unable to write message length to Stdout", rz.Error("error", err))
 	}
 }

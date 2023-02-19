@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/skerkour/rz"
+	"github.com/skerkour/rz/log"
 	"os"
 	"runtime"
 )
@@ -43,7 +45,7 @@ func newRelayInfo(port int, tags []string) (*RelayInfoSaveInfo, error) {
 		return nil, err
 	}
 	if _, err := os.Stat(userDataPath); os.IsNotExist(err) {
-		Trace.Printf("creating user data path: %s", userDataPath)
+		log.Info("creating user data path", rz.String("path", userDataPath))
 		err = os.Mkdir(userDataPath, 0755)
 		if err != nil {
 			return nil, err
@@ -57,7 +59,7 @@ func newRelayInfo(port int, tags []string) (*RelayInfoSaveInfo, error) {
 	defer func(relayInfoFile *os.File) {
 		err := relayInfoFile.Close()
 		if err != nil {
-			Error.Printf("could not close relay info file: %s", err)
+			log.Error("could not close relay info file", rz.Error("error", err))
 		}
 	}(relayInfoFile)
 
