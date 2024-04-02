@@ -34,3 +34,5 @@ sequenceDiagram
     deactivate RelayInfo(json file)
     deactivate Relay
 ```
+
+GoによるNative Messaging Hostの実装は[jfarleyx/chrome-native-messaging-golang](https://github.com/jfarleyx/chrome-native-messaging-golang)を参考にしました。ライセンスは[go-nmh-LICENSE](https://github.com/kenty02/clay-relay/blob/main/go-nmh-LICENSE)にあります。
